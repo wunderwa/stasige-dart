@@ -1,0 +1,17 @@
+/views/
+/pages/
+/data/
+/styles/
+/scripts/
+/assets/
+/css/
+/wrk
+/bin/wrk.dart
+/build.json
+/run.sh
+/.ai-content
+/.context/
+/CONTEXT.txt
+/.idea/
+/dist/
+/dev/

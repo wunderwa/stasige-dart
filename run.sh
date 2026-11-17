@@ -2,60 +2,35 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-python3 - <<'PY'
-import pathlib
-f = pathlib.Path('lib/src/run_site.dart')
-s = f.read_text()
+echo "==> full dry-run (save to file)"
+dart pub publish --dry-run > /tmp/pub_dry.txt 2>&1 || true
 
-old = "  if (cmd == 'init') { await runInit(); return; }"
-new = """  if (cmd == 'init') { await runInit(); return; }
-  if (cmd == 'new') { await runNew(rest); return; }"""
+echo "==> templates tree (from dry-run)"
+sed -n '/templates/,/^The server\|^Package\|^Validating\|^Total/p' /tmp/pub_dry.txt
 
-if "cmd == 'new'" in s:
-    print('already patched')
-elif old in s:
-    s = s.replace(old, new, 1)
-    f.write_text(s)
-    print('patched new')
-else:
-    print('ERROR: init one-liner not found')
-PY
+echo "==> checks"
+for f in \
+  'templates/default/css/bootstrap-5.3.8.min.css' \
+  'templates/default/pages/index.en.md' \
+  'templates/default/data/example.json' \
+  'templates/default/build.json' \
+  'templates/default/bin/wrk.dart' \
+  'templates/default/wrk' \
+  'templates/default/assets/svg/github.svg' \
+  'templates/default/styles/index.scss' \
+  'templates/default/scripts/index.ts' \
+  'templates/default/views/index.pug' \
+  'templates/default/views/plugins.dart' \
+  'templates/default/views/layouts/data.pug' \
+  'templates/default/views/layouts/default.pug'
+do
+  if grep -qF "$f" /tmp/pub_dry.txt; then echo "OK  $f"; else echo "MISS $f"; fi
+done
 
-grep -n "cmd == 'init'\|cmd == 'new'" lib/src/run_site.dart || true
+echo "==> undesired files"
+for f in run.sh '.context/' '.ai-content' 'CONTEXT.txt' 'bin/site.dart' 'bin/debug_menu.dart'; do
+  if grep -qF "$f" /tmp/pub_dry.txt; then echo "FAIL  $f is in archive"; else echo "OK  $f absent"; fi
+done
 
-dart analyze || true
-
-TMP="$(mktemp -d)"
-cat > "$TMP/pubspec.yaml" <<YAML
-name: e2e_site
-publish_to: none
-environment:
-  sdk: ^3.5.0
-dev_dependencies:
-  stasige:
-    path: /media/data/work/wunderwa/stasige-dart
-YAML
-( cd "$TMP" && dart pub get >/dev/null && dart run stasige init >/dev/null )
-
-echo "==> stasige new hello"
-( cd "$TMP" && dart run stasige new hello )
-
-test -f "$TMP/pages/hello/index.en.md" && echo "OK  en" || { echo "MISS en"; exit 1; }
-test -f "$TMP/pages/hello/index.ru.md" && echo "OK  ru" || { echo "MISS ru"; exit 1; }
-
-echo "==> content en:"
-cat "$TMP/pages/hello/index.en.md"
-
-echo "==> duplicate blocked?"
-( cd "$TMP" && dart run stasige new hello ) && echo "WARN dup allowed" || echo "OK  dup blocked"
-
-echo "==> nested: stasige new docs/intro"
-( cd "$TMP" && dart run stasige new docs/intro )
-test -f "$TMP/pages/docs/intro/index.en.md" && echo "OK  nested en" || echo "MISS nested"
-
-echo "==> build"
-( cd "$TMP" && ./wrk -b -D )
-test -f "$TMP/dev/hello/index.html" && echo "OK  hello html" || echo "MISS hello"
-test -f "$TMP/dev/docs/intro/index.html" && echo "OK  docs/intro html" || echo "MISS nested html"
-
-echo "tmp: $TMP"
+echo "==> archive size"
+grep 'Total compressed archive size' /tmp/pub_dry.txt || true
