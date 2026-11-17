@@ -1,0 +1,6 @@
+.main !{body}
+
+ul.list-group
+  each item in data.example.tech[lang]
+    li.list-group-item
+      a(href=item.url target="_blank" rel="noopener noreferrer")= item.title

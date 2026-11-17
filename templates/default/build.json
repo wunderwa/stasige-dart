@@ -1,0 +1,17 @@
+{
+  "langs": ["en", "ru"],
+  "meta": {
+    "title": { "en": "My Site", "ru": "Мой Сайт" },
+    "description": {
+      "en": "Site built with Stasige SSG",
+      "ru": "Сайт на Stasige SSG"
+    }
+  },
+  "links": {
+    "github": {
+      "url": "https://github.com/",
+      "en": "GitHub",
+      "ru": "GitHub"
+    }
+  }
+}

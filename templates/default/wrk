@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")"
+
+usage() {
+  cat <<USG
+Usage: ./wrk -b [-D] [-S] [-J] [-H] [-I] [-C]
+       ./wrk -C
+       ./wrk srv
+Options:
+  -b  build
+  -D  dev (dev/, timekey=dev)
+  -S  css only
+  -J  js only
+  -H  html only
+  -I  img only
+  -C  clear target dir before build (or alone)
+  -h  help
+USG
+}
+
+BUILD=0; DEV=0; CSS=0; JS=0; HTML=0; IMG=0; CLEAR=0; SRV=0
+while getopts "bDSJH ICh" opt 2>/dev/null; do :; done
+# -- простой разбор --
+args=("$@")
+i=0
+while [ $i -lt ${#args[@]} ]; do
+  a="${args[$i]}"
+  case "$a" in
+    -b) BUILD=1 ;;
+    -D) DEV=1 ;;
+    -S) CSS=1 ;;
+    -J) JS=1 ;;
+    -H) HTML=1 ;;
+    -I) IMG=1 ;;
+    -C) CLEAR=1 ;;
+    -h) usage; exit 0 ;;
+    srv) SRV=1 ;;
+    *) echo "Unknown arg: $a"; usage; exit 1 ;;
+  esac
+  i=$((i+1))
+done
+
+TARGET=dist
+[ "$DEV" = "1" ] && TARGET=dev
+
+if [ "$SRV" = "1" ]; then
+  python3 -m http.server -d "$TARGET" 8000
+  exit 0
+fi
+
+if [ "$CLEAR" = "1" ]; then
+  echo "clear: $TARGET"
+  rm -rf "$TARGET"
+  [ "$BUILD" = "0" ] && exit 0
+fi
+
+if [ "$BUILD" = "0" ]; then
+  usage; exit 1
+fi
+
+DART_ARGS=(build)
+[ "$DEV" = "1" ] && DART_ARGS+=(--dev)
+[ "$CSS" = "1" ] && DART_ARGS+=(--css)
+[ "$JS" = "1" ] && DART_ARGS+=(--js)
+[ "$HTML" = "1" ] && DART_ARGS+=(--html)
+[ "$IMG" = "1" ] && DART_ARGS+=(--img)
+
+echo "wrk: dart run bin/wrk.dart ${DART_ARGS[*]}"
+exec dart run bin/wrk.dart "${DART_ARGS[@]}"

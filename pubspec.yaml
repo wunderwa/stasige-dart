@@ -1,0 +1,19 @@
+name: stasige
+description: Static site generator on Dart — Markdown, Pug, SCSS, multi-language.
+version: 0.1.0
+repository: https://github.com/wunderwa/stasige
+environment:
+  sdk: ^3.5.0
+
+dependencies:
+  args: ^2.6.0
+  path: ^1.9.0
+  yaml: ^3.1.2
+  markdown: ^7.2.2
+  pug_dart: ^2.0.1
+  sass: ^1.80.0
+  dsharp: ^0.1.1
+
+dev_dependencies:
+  lints: ^5.0.0
+  test: ^1.25.0

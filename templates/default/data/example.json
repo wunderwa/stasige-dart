@@ -1,0 +1,20 @@
+{
+  "tech": {
+    "en": [
+      { "title": "Dart", "url": "https://dart.dev/" },
+      { "title": "pug_dart", "url": "https://pub.dev/packages/pug_dart" },
+      { "title": "markdown", "url": "https://pub.dev/packages/markdown" },
+      { "title": "sass", "url": "https://pub.dev/packages/sass" },
+      { "title": "yaml", "url": "https://pub.dev/packages/yaml" },
+      { "title": "Bootstrap", "url": "https://getbootstrap.com/" }
+    ],
+    "ru": [
+      { "title": "Dart", "url": "https://dart.dev/" },
+      { "title": "pug_dart", "url": "https://pub.dev/packages/pug_dart" },
+      { "title": "markdown", "url": "https://pub.dev/packages/markdown" },
+      { "title": "sass", "url": "https://pub.dev/packages/sass" },
+      { "title": "yaml", "url": "https://pub.dev/packages/yaml" },
+      { "title": "Bootstrap", "url": "https://getbootstrap.com/" }
+    ]
+  }
+}

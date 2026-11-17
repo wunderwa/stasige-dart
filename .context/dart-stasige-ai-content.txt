@@ -1,0 +1,983 @@
+# AI context bundle
+project: stasige
+type:    dart
+root:    /media/data/work/wunderwa/stasige-dart
+========
+
+pubspec.yaml
+------
+name: stasige
+description: Static site generator on Dart — Markdown, Pug, SCSS, multi-language.
+version: 0.1.0
+repository: https://github.com/wunderwa/stasige
+environment:
+  sdk: ^3.5.0
+
+dependencies:
+  args: ^2.6.0
+  path: ^1.9.0
+  yaml: ^3.1.2
+  markdown: ^7.2.2
+  pug_dart: ^2.0.1
+  sass: ^1.80.0
+  dsharp: ^0.1.1
+
+dev_dependencies:
+  lints: ^5.0.0
+  test: ^1.25.0
+
+======
+
+lib/src/build_html.dart
+------
+import 'package:pug_dart/pug_dart.dart' as pug;
+import 'config.dart';
+import 'pages.dart';
+import 'menus.dart';
+import 'gen_page.dart';
+
+/// Аналог taskHtml из core/task-html.ts
+Future<void> taskHtml(
+  CoreConfig cfg,
+  Map<String, pug.PugHelper> helpers,
+) async {
+  final pages = getPageConfigList(cfg);
+  final menus = getMenus(pages, cfg.build.langs);
+
+  for (final page in pages) {
+    await genPage(cfg: cfg, page: page, menus: menus, helpers: helpers);
+  }
+}
+
+======
+
+lib/src/config.dart
+------
+import 'dart:io';
+import 'package:path/path.dart' as p;
+import 'package:yaml/yaml.dart';
+
+/// Соответствует core/utils/config.ts + types.ts (CoreConfig, BuildConfig)
+class BuildConfig {
+  final List<String> langs;
+  final Map<String, dynamic> meta;
+  final Map<String, dynamic> links;
+  BuildConfig({required this.langs, required this.meta, required this.links});
+}
+
+class CoreConfig {
+  final Directory root;
+  final BuildConfig build;
+  final bool dev;
+  final String timekey;
+  final String distDir;
+  final String pagesDir;
+
+  CoreConfig({
+    required this.root,
+    required this.build,
+    required this.dev,
+    required this.timekey,
+    required this.distDir,
+    required this.pagesDir,
+  });
+
+  String pathInPages([String file = '']) => p.join(pagesDir, file);
+  String pathInBuild([String file = '']) => p.join(distDir, file);
+}
+
+/// Аналог getConfig({ mono, dev, siteName }) — без мультисайтовости.
+CoreConfig getConfig({required bool dev}) {
+  final root = Directory.current;
+  final buildFile = File(p.join(root.path, 'build.json'));
+  final raw = loadYaml(buildFile.readAsStringSync()) as YamlMap;
+
+  final build = BuildConfig(
+    langs: (raw['langs'] as YamlList).cast<String>(),
+    meta: (raw['meta'] as YamlMap?)?.cast<String, dynamic>() ?? {},
+    links: (raw['links'] as YamlMap?)?.cast<String, dynamic>() ?? {},
+  );
+
+  final distDir = p.join(root.path, dev ? 'dev' : 'dist');
+
+  return CoreConfig(
+    root: root,
+    build: build,
+    dev: dev,
+    timekey: dev ? 'dev' : DateTime.now().millisecondsSinceEpoch.toRadixString(36),
+    distDir: distDir,
+    pagesDir: p.join(root.path, 'pages'),
+  );
+}
+
+======
+
+lib/src/find_page.dart
+------
+import 'pages.dart';
+
+/// Аналог findPage из core/utils/findPage.ts
+PageConfig? findPage(List<PageConfig> pages, {String? pathBase, String? lang}) {
+  if (pages.isEmpty) return null;
+  if (pathBase == null && lang == null) return pages.first;
+
+  if (pathBase != null && lang != null) {
+    final hit = pages.where((p) => p.pathBase == pathBase && p.lang == lang).firstOrNull;
+    if (hit != null) return hit;
+  }
+  if (pathBase != null) {
+    return pages.where((p) => p.pathBase == pathBase).firstOrNull ?? pages.first;
+  }
+  return pages.first;
+}
+
+======
+
+lib/src/gen_page.dart
+------
+import 'dart:io';
+import 'dart:convert';
+import 'package:path/path.dart' as p;
+import 'package:pug_dart/pug_dart.dart' as pug;
+import 'config.dart';
+import 'pages.dart';
+import 'menus.dart';
+import 'langs.dart';
+
+
+Map<String, dynamic> _readData(String dir) {
+  final d = Directory(dir);
+  if (!d.existsSync()) return {};
+  final out = <String, dynamic>{};
+  for (final f in d.listSync().whereType<File>()) {
+    if (!f.path.endsWith('.json')) continue;
+    final name = f.uri.pathSegments.last.replaceAll('.json', '');
+    out[name] = jsonDecode(f.readAsStringSync());
+  }
+  return out;
+}
+
+
+Map<String, dynamic> _menusToMap(Map<String, List<MenuMainItem>> menus) {
+  Map<String, dynamic> item(MenuMainItem i) => {
+    'lang': i.lang,
+    'path': i.path,
+    'pathBase': i.pathBase,
+    'menuShort': i.menuShort,
+    'menuLong': i.menuLong,
+    'title': i.title,
+    'children': i.children.map(item).toList(),
+  };
+  return menus.map((k, v) => MapEntry(k, v.map(item).toList()));
+}
+
+Future<void> genPage({
+  required CoreConfig cfg,
+  required PageConfig page,
+  required Menus menus,
+  required Map<String, pug.PugHelper> helpers,
+}) async {
+  final viewsDir = p.join(cfg.root.path, 'views');
+  final layoutFile = p.join(viewsDir, 'layouts', '${page.layout}.pug');
+  final viewFile = p.join(viewsDir, 'index.pug');
+
+  final options = pug.PugOptions(helpers: helpers, allowLocalAssignments: true);
+
+  final layoutLocals = <String, Object?>{
+    'title': page.title,
+    'menuShort': page.menuShort,
+    'menuLong': page.menuLong,
+    'body': page.body,
+    'lang': page.lang,
+    'path': page.path,
+    'pathBase': page.pathBase,
+    'langs': cfg.build.langs,
+    'mainMenu': _menusToMap(menus.mainMenu),
+    'linksByLang': menus.linksByLang,
+    'linksByDir': menus.linksByDir,
+    'timekey': cfg.timekey,
+    'meta': cfg.build.meta,
+    'links': cfg.build.links,
+    'data': _readData(p.join(cfg.root.path, 'data')),
+  };
+
+  final layoutContent = await pug.renderFile(layoutFile, layoutLocals, options);
+
+  final viewLocals = <String, Object?>{
+    ...layoutLocals,
+    'content': layoutContent,
+    'pageLangs': getPageLangs(
+      cfg.build.langs,
+      page.lang,
+      menus.linksByDir[page.pathBase] ?? {},
+    ),
+  };
+
+  final html = await pug.renderFile(viewFile, viewLocals, options);
+
+  // Убираем ведущий слэш, иначе p.join сбросит distDir
+  final relPath = page.path.startsWith('/') ? page.path.substring(1) : page.path;
+  final outFile = File(cfg.pathInBuild(p.join(relPath, 'index.html')));
+  await outFile.parent.create(recursive: true);
+  await outFile.writeAsString(html);
+}
+
+======
+
+lib/src/langs.dart
+------
+import 'menus.dart';
+
+class PageLang {
+  final String url;
+  final String title;
+  final String lang;
+  final bool disabled;
+  PageLang({required this.url, required this.title, required this.lang, required this.disabled});
+}
+
+/// Аналог getPageLangs из core/utils/langs.ts
+List<PageLang> getPageLangs(
+  List<String> langs,
+  String currentLang,
+  Map<String, MenuItem> dirs,
+) {
+  final out = <PageLang>[];
+  for (final lng in langs) {
+    final it = dirs[lng];
+    if (it == null) continue;
+    out.add(PageLang(
+      url: it.path,
+      title: it.lang,
+      lang: it.lang,
+      disabled: it.lang == currentLang,
+    ));
+  }
+  return out;
+}
+
+======
+
+lib/src/markdown_attrs.dart
+------
+import 'package:markdown/markdown.dart' as md;
+
+class _Attrs {
+  final String cleanText;
+  final String? classes;
+  final String? id;
+  _Attrs(this.cleanText, this.classes, this.id);
+}
+
+_Attrs? _parse(String text) {
+  final m = RegExp(r'\{([^}]+)\}\s*$').firstMatch(text);
+  if (m == null) return null;
+  final raw = m.group(1)!;
+  final classes = <String>[];
+  String? id;
+  for (final part in raw.split(RegExp(r'\s+'))) {
+    if (part.startsWith('.')) {
+      classes.add(part.substring(1));
+    } else if (part.startsWith('#')) {
+      id = part.substring(1);
+    }
+  }
+  if (classes.isEmpty && id == null) return null;
+  return _Attrs(
+    text.substring(0, m.start),
+    classes.isEmpty ? null : classes.join(' '),
+    id,
+  );
+}
+
+void _apply(md.Element e) {
+  if (e.children == null || e.children!.isEmpty) return;
+  final last = e.children!.last;
+  if (last is! md.Text) return;
+  final a = _parse(last.text);
+  if (a == null) return;
+  if (a.classes != null) e.attributes['class'] = a.classes!;
+  if (a.id != null) e.attributes['id'] = a.id!;
+  e.children![e.children!.length - 1] = md.Text(a.cleanText);
+}
+
+void _walk(List<md.Node> nodes) {
+  for (final n in nodes) {
+    if (n is md.Element) {
+      _apply(n);
+      if (n.children != null) _walk(n.children!);
+    }
+  }
+}
+
+String renderMarkdown(String src) {
+  final doc = md.Document(extensionSet: md.ExtensionSet.gitHubWeb);
+  final nodes = doc.parseLines(src.split('\n'));
+  _walk(nodes);
+  return md.HtmlRenderer().render(nodes);
+}
+
+======
+
+lib/src/markdown.dart
+------
+import 'dart:io';
+import 'package:yaml/yaml.dart';
+import 'markdown_attrs.dart';
+
+const separator = '<!--config-->';
+
+Map<String, dynamic> parseMd(String filePath, Map<String, dynamic> build) {
+  final content = File(filePath).readAsStringSync();
+  final parts = content.split(separator);
+  final yamlPart = parts.first.trim()
+      .replaceFirst(RegExp(r'^```yaml'), '')
+      .replaceFirst(RegExp(r'```$'), '');
+  final bodySrc = parts.length > 1 ? parts.sublist(1).join(separator) : '';
+
+  final front = (loadYaml(yamlPart) as YamlMap?)?.cast<String, dynamic>() ?? {};
+
+  return {
+    'layout': 'default',
+    ...front,
+    'body': renderMarkdown(_applyVars(bodySrc, build)),
+  };
+}
+
+String _applyVars(String src, Map<String, dynamic> build) {
+  final map = <String, String>{};
+  void walk(dynamic node, String prefix) {
+    if (node is Map) {
+      node.forEach((k, v) => walk(v, prefix.isEmpty ? k.toString() : '$prefix.$k'));
+    } else if (node is List) {
+      for (var i = 0; i < node.length; i++) {
+        walk(node[i], '$prefix.$i');
+      }
+    } else {
+      map['\${$prefix}'] = node.toString();
+    }
+  }
+  walk(build, '');
+  var out = src;
+  map.forEach((k, v) => out = out.replaceAll(k, v));
+  return out;
+}
+
+======
+
+lib/src/menus.dart
+------
+import 'pages.dart';
+
+class MenuItem {
+  final String lang;
+  final String path;
+  final String pathBase;
+  final String menuShort;
+  final String menuLong;
+  final String title;
+  MenuItem({
+    required this.lang,
+    required this.path,
+    required this.pathBase,
+    required this.menuShort,
+    required this.menuLong,
+    required this.title,
+  });
+}
+
+class MenuMainItem extends MenuItem {
+  final List<MenuMainItem> children;
+  MenuMainItem({
+    required super.lang,
+    required super.path,
+    required super.pathBase,
+    required super.menuShort,
+    required super.menuLong,
+    required super.title,
+    required this.children,
+  });
+}
+
+class Menus {
+  final Map<String, Map<String, MenuItem>> linksByLang;
+  final Map<String, Map<String, MenuItem>> linksByDir;
+  final Map<String, List<MenuMainItem>> mainMenu;
+  Menus({required this.linksByLang, required this.linksByDir, required this.mainMenu});
+}
+
+Map<String, Map<String, MenuItem>> _groupByLang(List<PageConfig> pages, List<String> langs) {
+  final acc = <String, Map<String, MenuItem>>{};
+  for (final pg in pages) {
+    if (!langs.contains(pg.lang)) continue;
+    acc.putIfAbsent(pg.lang, () => {});
+    acc[pg.lang]![pg.pathBase] = MenuItem(
+      lang: pg.lang, path: pg.path, pathBase: pg.pathBase,
+      menuShort: pg.menuShort, menuLong: pg.menuLong, title: pg.title,
+    );
+  }
+  return acc;
+}
+
+Map<String, Map<String, MenuItem>> _groupByDir(List<PageConfig> pages, List<String> langs) {
+  final acc = <String, Map<String, MenuItem>>{};
+  for (final pg in pages) {
+    if (!langs.contains(pg.lang)) continue;
+    acc.putIfAbsent(pg.pathBase, () => {});
+    acc[pg.pathBase]![pg.lang] = MenuItem(
+      lang: pg.lang, path: pg.path, pathBase: pg.pathBase,
+      menuShort: pg.menuShort, menuLong: pg.menuLong, title: pg.title,
+    );
+  }
+  return acc;
+}
+
+List<MenuMainItem> _groupChildren(Map<String, MenuItem> items) {
+  final mapped = items.values.map((it) {
+    final dirList = [it.lang, ...it.pathBase.split('/').where((d) => d.isNotEmpty)];
+    return {
+      'item': it,
+      'id': dirList.join(':'),
+      'pid': dirList.sublist(0, dirList.length - 1).join(':'),
+    };
+  }).toList();
+
+  List<MenuMainItem> children(String pid) {
+    return mapped.where((m) => m['pid'] == pid).map((m) {
+      final it = m['item'] as MenuItem;
+      return MenuMainItem(
+        lang: it.lang, path: it.path, pathBase: it.pathBase,
+        menuShort: it.menuShort, menuLong: it.menuLong, title: it.title,
+        children: children(m['id'] as String),
+      );
+    }).toList();
+  }
+
+  return mapped.where((m) => m['pid'] == '').map((m) {
+    final it = m['item'] as MenuItem;
+    return MenuMainItem(
+      lang: it.lang, path: it.path, pathBase: it.pathBase,
+      menuShort: it.menuShort, menuLong: it.menuLong, title: it.title,
+      children: children(m['id'] as String),
+    );
+  }).toList();
+}
+
+/// Аналог getMenus из core/utils/menus.ts
+Menus getMenus(List<PageConfig> pages, List<String> langs) {
+  final byLang = _groupByLang(pages, langs);
+  final byDir = _groupByDir(pages, langs);
+  final mainMenu = byLang.map((lang, items) => MapEntry(lang, _groupChildren(items)));
+  return Menus(linksByLang: byLang, linksByDir: byDir, mainMenu: mainMenu);
+}
+
+======
+
+lib/src/pages.dart
+------
+import 'dart:io';
+import 'package:path/path.dart' as p;
+import 'config.dart';
+import 'markdown.dart';
+
+/// Аналог PageConfig из types.ts
+class PageConfig {
+  final String lang;
+  final String src;
+  final String path;
+  final String pathBase;
+  final String title;
+  final String layout;
+  final String menuShort;
+  final String menuLong;
+  final String body;
+
+  PageConfig({
+    required this.lang,
+    required this.src,
+    required this.path,
+    required this.pathBase,
+    required this.title,
+    required this.layout,
+    required this.menuShort,
+    required this.menuLong,
+    required this.body,
+  });
+}
+
+final pageRegExp = RegExp(r'index\.([a-z]{2})\.md$');
+
+/// Аналог getPageConfigList из core/utils/pageConfigs.ts
+List<PageConfig> getPageConfigList(CoreConfig cfg) {
+  final mainLang = cfg.build.langs.first;
+  final dir = Directory(cfg.pagesDir);
+  if (!dir.existsSync()) return [];
+
+  return dir
+      .listSync(recursive: true)
+      .whereType<File>()
+      .where((f) => pageRegExp.hasMatch(f.path))
+      .map((f) {
+    final lang = pageRegExp.firstMatch(f.path)!.group(1)!;
+    final rel = p.relative(f.path, from: cfg.pagesDir);
+    final pathBase = p.dirname('/$rel');
+    final isMain = lang == mainLang;
+    final path = '${isMain ? '' : '/$lang'}$pathBase';
+    final parsed = parseMd(f.path, {
+      'langs': cfg.build.langs,
+      'meta': cfg.build.meta,
+      'links': cfg.build.links,
+    });
+
+    return PageConfig(
+      lang: lang,
+      src: f.path,
+      path: path,
+      pathBase: pathBase,
+      title: parsed['title']?.toString() ?? '',
+      layout: parsed['layout']?.toString() ?? 'default',
+      menuShort: parsed['menuShort']?.toString() ?? '',
+      menuLong: parsed['menuLong']?.toString() ?? '',
+      body: parsed['body']?.toString() ?? '',
+    );
+  }).toList();
+}
+
+======
+
+lib/src/run_site.dart
+------
+import 'package:args/args.dart';
+import 'package:pug_dart/pug_dart.dart' as pug;
+import 'config.dart';
+import 'build_html.dart';
+
+/// Публичный API пакета.
+/// Аналог src/wrk.ts (упрощённо): поддерживает `wrk -b` и `-D` (dev).
+Future<void> runSite({
+  required List<String> args,
+  Map<String, pug.PugHelper> helpers = const {},
+}) async {
+  final parser = ArgParser()
+    ..addFlag('build', abbr: 'b', negatable: false)
+    ..addFlag('dev', abbr: 'D', negatable: false)
+    ..addFlag('help', abbr: 'h', negatable: false);
+
+  final argv = parser.parse(args);
+  final cmd = argv.rest.isNotEmpty ? argv.rest.first : '';
+
+  if (argv['help'] as bool || cmd == 'help') {
+    print('Usage: stasige wrk -b [-D]');
+    return;
+  }
+
+  if (cmd == 'wrk') {
+    if (!(argv['build'] as bool)) {
+      print('Nothing to do. Use -b to build.');
+      return;
+    }
+    final cfg = getConfig(dev: argv['dev'] as bool);
+    await taskHtml(cfg, helpers);
+    print('Built: ${cfg.distDir}');
+    return;
+  }
+
+  print('Unknown command: $cmd');
+}
+
+======
+
+lib/stasige.dart
+------
+/// Static site generator on Dart.
+library stasige;
+
+export 'src/run_site.dart';
+export 'src/config.dart';
+
+======
+
+templates/default/assets/.gitkeep
+------
+<empty>
+======
+
+templates/default/assets/images/.gitkeep
+------
+<empty>
+======
+
+templates/default/assets/svg/github.svg
+------
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" fill="#212529"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8"/></svg>
+
+======
+
+templates/default/assets/svg/stasige.svg
+------
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="32" height="32" fill="#212529"><path d="M 25.999963 1.9233968 L 26.00048 6.7200033 C 23.301396 7.3573492 20.721656 8.4224273 18.359086 9.8748494 L 15.029574 6.5453369 L 6.5448201 15.03009 L 9.8743327 18.359603 C 8.4221418 20.722046 7.3572405 23.301606 6.7200033 26.00048 L 1.92288 26.00048 L 1.9233968 38.000781 L 6.7200033 38.000264 C 7.3571881 40.699319 8.422091 43.279056 9.8743327 45.641659 L 6.5448201 48.971688 L 15.029574 57.456441 L 18.359603 54.126929 C 20.722079 55.578938 23.301637 56.643665 26.00048 57.280741 L 26.00048 62.077348 L 38.000264 62.077348 L 38.000264 57.280741 C 40.699109 56.643665 43.278666 55.578939 45.641142 54.126929 L 48.971171 57.456441 L 57.455924 48.971688 L 54.126412 45.641659 C 55.578653 43.279056 56.643557 40.699319 57.280741 38.000264 L 62.077348 38.000781 L 62.077348 26.000997 L 57.280741 26.00048 C 56.643504 23.301606 56.467437 20.95614 55.015247 18.593697 L 57.455924 15.03009 L 48.971171 6.5453369 L 45.641659 9.8748494 C 43.279088 8.4224272 40.69935 7.3573491 38.000264 6.7200033 L 38.000781 1.9233968 L 25.999963 1.9233968 z M 28.99978 5.0002116 L 34.999931 5.0002116 L 34.999931 9.2015055 C 39.003524 9.7278168 41.946896 11.524726 45.150732 13.982609 L 48.362939 10.413318 L 53.842192 15.162382 L 51.740511 20.608044 C 54.198127 23.811788 54.273508 24.997451 54.799756 29.000814 L 59.000016 29.000814 L 59.000016 35.000964 L 54.799756 35.000964 C 54.273508 39.004327 52.702611 42.798615 50.244995 46.00236 L 53.213289 48.971171 L 48.970654 53.213806 L 46.001843 50.245512 C 42.798099 52.703127 39.003811 54.274025 35.000448 54.800273 L 35.000448 59.000533 L 29.000297 59.000533 L 29.000297 54.800273 C 24.996934 54.274025 21.202646 52.703127 17.998901 50.245512 L 15.03009 53.213806 L 10.787455 48.971171 L 12.829708 43.62111 C 10.371371 40.417234 9.7259658 39.003805 9.1994385 34.999931 L 5.0002116 34.999931 L 5.0002116 28.99978 L 9.1994385 28.99978 C 9.725598 24.996237 11.296501 21.20176 13.754199 17.997868 L 10.786938 15.03009 L 15.029574 10.787455 L 17.998901 13.756266 C 21.202498 11.298735 24.996598 9.7278402 28.99978 9.2015055 L 28.99978 5.0002116 z M 48.607369 12.785783 C 48.382398 13.095776 44.377444 20.096841 44.219006 20.285067 C 44.074304 20.478984 43.944019 20.618936 43.827816 20.705196 C 43.72535 20.797146 43.628749 20.854232 43.538944 20.876762 C 43.468156 20.892242 43.39886 20.886062 43.330172 20.857642 C 42.766916 20.624333 42.217012 20.299615 41.681177 19.883541 C 41.164357 19.460411 40.646232 19.021655 40.126233 18.567342 C 39.606234 18.113032 39.08512 17.680646 38.563021 17.270264 C 38.05994 16.852822 37.554103 16.538748 37.045801 16.328202 C 35.64453 15.747777 34.247011 15.429948 32.853292 15.375289 C 31.464851 15.307889 30.165589 15.47187 28.955855 15.866732 C 27.765138 16.25454 26.704798 16.852861 25.774137 17.661971 C 24.857217 18.476772 24.161042 19.45783 23.685893 20.604944 C 23.316331 21.497144 23.20938 22.415892 23.364982 23.361365 C 23.525866 24.294091 23.853591 25.251066 24.348385 26.232507 C 24.848457 27.201203 25.462356 28.187397 26.189616 29.190466 C 26.922156 30.18079 27.677629 31.173413 28.456661 32.168062 C 29.254711 33.155657 30.022578 34.138108 30.760396 35.115686 C 31.498217 36.093265 32.122519 37.053441 32.63315 37.996647 C 33.143783 38.939852 33.487374 39.859095 33.664095 40.753585 C 33.846095 41.635328 33.768401 42.483957 33.430518 43.299683 C 33.229898 43.78402 32.917745 44.207264 32.494141 44.569373 C 32.070535 44.931479 31.557943 45.197128 30.956767 45.366223 C 30.374607 45.528264 29.716093 45.583911 28.98066 45.533138 C 28.245227 45.482368 27.465545 45.28597 26.641268 44.944543 C 25.239998 44.364119 24.126372 43.671462 23.300903 42.866634 C 22.489172 42.067496 21.901476 41.174629 21.537703 40.187728 C 21.187671 39.206517 21.039711 38.145027 21.09432 37.002909 C 21.14893 35.860791 21.351605 34.652797 21.702035 33.379358 L 19.208647 32.346346 L 15.642456 44.808634 L 17.9927 46.925818 C 18.371852 46.321308 18.655723 45.034233 18.822624 44.864445 C 19.003239 44.700337 19.313992 43.687203 19.410185 43.727047 C 20.055868 43.994497 19.51272 44.105191 20.158459 44.566789 C 20.817937 45.034076 21.462807 45.517512 22.092708 46.017346 C 22.741629 46.510126 23.368172 46.978935 23.972697 47.423462 C 24.59096 47.873679 25.188359 48.217992 25.765352 48.456991 C 27.290264 49.088629 28.791258 49.448743 30.267403 49.537545 C 31.748832 49.613605 33.119857 49.449903 34.381364 49.046619 C 35.656609 48.649025 36.771941 48.035849 37.726896 47.206938 C 38.687133 46.36528 39.417981 45.339414 39.919527 44.128573 C 40.320766 43.1599 40.450044 42.167935 40.3071 41.153044 C 40.169438 40.125407 39.856587 39.09264 39.369173 38.054525 C 38.881761 37.01641 38.266435 35.977345 37.522257 34.937402 C 36.77808 33.897461 36.002293 32.874369 35.195785 31.868339 C 34.389274 30.862308 33.598139 29.877464 32.822286 28.913997 C 32.046433 27.950529 31.383511 27.026208 30.832743 26.14104 C 30.287256 25.243128 29.898066 24.395222 29.665373 23.597009 C 29.432679 22.798795 29.455842 22.061815 29.735653 21.386292 C 29.915152 20.952937 30.202039 20.571219 30.596065 20.241659 C 30.990096 19.912096 31.455148 19.6644 31.990812 19.498035 C 32.52648 19.331669 33.111238 19.260407 33.745227 19.284094 C 34.379215 19.307784 35.025738 19.455888 35.68516 19.729028 C 36.88036 20.224097 37.831627 20.842309 38.538733 21.583179 C 39.264856 22.316993 39.785259 23.159796 40.099361 24.11119 C 40.41346 25.062585 40.544567 26.124778 40.493136 27.298075 C 40.446986 28.458629 39.507904 29.903288 39.172286 31.257524 L 43.753918 38.468453 L 45.54244 33.591231 C 47.692148 34.153854 50.043701 32.827061 51.06665 30.231746 C 52.130287 27.532754 51.356769 23.890635 49.17581 23.15776 C 49.050137 23.11654 48.921661 23.082742 48.79082 23.056474 L 51.093522 16.010909 L 48.607369 12.785783 z M 47.262748 25.581384 A 2 2.5 20 0 1 47.645671 25.669751 A 2 2.5 20 0 1 48.670414 28.703158 A 2 2.5 20 0 1 45.935697 30.368172 A 2 2.5 20 0 1 44.911471 27.335282 A 2 2.5 20 0 1 47.262748 25.581384 z"/></svg>
+
+======
+
+templates/default/build.json
+------
+{
+  "langs": ["en", "ru"],
+  "meta": {
+    "title": { "en": "My Site", "ru": "Мой Сайт" },
+    "description": {
+      "en": "Site built with Stasige SSG",
+      "ru": "Сайт на Stasige SSG"
+    }
+  },
+  "links": {
+    "github": {
+      "url": "https://github.com/",
+      "en": "GitHub",
+      "ru": "GitHub"
+    }
+  }
+}
+
+======
+
+templates/default/css/bootstrap-5.3.8.min.css
+------
+<path only>
+======
+
+templates/default/data/example.json
+------
+{
+  "tech": {
+    "en": [
+      { "title": "Dart", "url": "https://dart.dev/" },
+      { "title": "pug_dart", "url": "https://pub.dev/packages/pug_dart" },
+      { "title": "markdown", "url": "https://pub.dev/packages/markdown" },
+      { "title": "sass", "url": "https://pub.dev/packages/sass" },
+      { "title": "yaml", "url": "https://pub.dev/packages/yaml" },
+      { "title": "Bootstrap", "url": "https://getbootstrap.com/" }
+    ],
+    "ru": [
+      { "title": "Dart", "url": "https://dart.dev/" },
+      { "title": "pug_dart", "url": "https://pub.dev/packages/pug_dart" },
+      { "title": "markdown", "url": "https://pub.dev/packages/markdown" },
+      { "title": "sass", "url": "https://pub.dev/packages/sass" },
+      { "title": "yaml", "url": "https://pub.dev/packages/yaml" },
+      { "title": "Bootstrap", "url": "https://getbootstrap.com/" }
+    ]
+  }
+}
+
+======
+
+templates/default/pages/about/index.en.md
+------
+```yaml
+layout: default
+menuShort: About
+menuLong: About this site
+title: About
+```
+<!--config-->
+## About{.text-center}
+
+### Markdown attrs
+
+Text centered with `{.text-center}`
+{.text-center}
+
+A colored block with `{.alert .alert-info}`
+{.alert .alert-info}
+
+### Build variables
+
+Site title from `build.json`: **${meta.title.en}**
+{.text-center}
+
+### Menus
+
+Multi-level from `pathBase`. See navbar above.
+{.text-center}
+
+### Links
+
+[GitHub](${links.github.url}){.btn .btn-secondary}
+
+======
+
+templates/default/pages/about/index.ru.md
+------
+```yaml
+layout: default
+menuShort: О сайте
+menuLong: Об этом сайте
+title: О сайте
+```
+<!--config-->
+## О сайте{.text-center}
+
+### Атрибуты Markdown
+
+Текст по центру через `{.text-center}`
+{.text-center}
+
+Цветной блок через `{.alert .alert-info}`
+{.alert .alert-info}
+
+### Переменные сборки
+
+Название сайта из `build.json`: **${meta.title.ru}**
+{.text-center}
+
+### Меню
+
+Многоуровневое из `pathBase`. Смотрите navbar выше.
+{.text-center}
+
+### Ссылки
+
+[GitHub](${links.github.url}){.btn .btn-secondary}
+
+======
+
+templates/default/pages/data/index.en.md
+------
+```yaml
+layout: data
+menuShort: Data
+menuLong: Data example
+title: Data
+```
+<!--config-->
+## Data example{.text-center}
+
+List below is rendered from `data/example.json` via `data.example.tech`.
+
+======
+
+templates/default/pages/data/index.ru.md
+------
+```yaml
+layout: data
+menuShort: Данные
+menuLong: Пример данных
+title: Данные
+```
+<!--config-->
+## Пример данных{.text-center}
+
+Список ниже отрисован из `data/example.json` через `data.example.tech`.
+
+======
+
+templates/default/pages/index.en.md
+------
+```yaml
+layout: default
+menuShort: Home
+menuLong: Home page
+title: Home page
+```
+<!--config-->
+## Welcome to ${meta.title.en}{.text-center}
+
+This site is generated with **Stasige SSG**.
+{.text-center}
+
+[About](/about){.btn .btn-primary}
+{.text-center}
+
+======
+
+templates/default/pages/index.ru.md
+------
+```yaml
+layout: default
+menuShort: Главная
+menuLong: Главная страница
+title: Главная страница
+```
+<!--config-->
+## Добро пожаловать на ${meta.title.ru}{.text-center}
+
+Сайт сгенерирован через **Stasige SSG**.
+{.text-center}
+
+[О сайте](/ru/about){.btn .btn-primary}
+{.text-center}
+
+======
+
+templates/default/scripts/index.ts
+------
+<empty>
+======
+
+templates/default/styles/index.scss
+------
+<empty>
+======
+
+templates/default/views/icons/github.pug
+------
+svg.bi.bi-github(xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='currentColor' viewbox='0 0 16 16')
+  path(d='M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8')
+
+======
+
+templates/default/views/index.pug
+------
+doctype html
+html(lang=lang)
+  include ./partial/head
+  body
+    include partial/navbar
+    div.container-lg.content !{content}
+    include ./partial/footer
+include ./partial/modal
+
+======
+
+templates/default/views/layouts/data.pug
+------
+.main !{body}
+
+ul.list-group
+  each item in data.example.tech[lang]
+    li.list-group-item
+      a(href=item.url target="_blank" rel="noopener noreferrer")= item.title
+
+======
+
+templates/default/views/layouts/default.pug
+------
+.main !{body}
+
+======
+
+templates/default/views/partial/footer.pug
+------
+footer.container-lg.d-flex.flex-row.justify-content-center.pt-4
+  a.st-footer-link.btn(href="https://github.com/wunderwa/stasige" target="_blank" rel="noopener noreferrer")
+    | Powered by
+    img(src=assets('svg/stasige.svg') alt="Stasige" width="24" height="24" class="mx-1")
+    | Stasige SSG
+
+======
+
+templates/default/views/partial/header/langs.pug
+------
+.btn-group.d-flex
+  each pgu in pageLangs
+    if (pgu.disabled)
+      a.btn.btn-outline-info.btn-sm.disabled(href='' + pgu.url + '')=pgu.title
+    else
+      a.btn.btn-outline-info.btn-sm(href='' + pgu.url + '')=pgu.title
+
+======
+
+templates/default/views/partial/header/menu-mix.pug
+------
+mixin navItem(item, path)
+  if item.children
+    li.nav-item.dropdown
+      a.nav-link.dropdown-toggle(href="#" role='button' data-bs-toggle='dropdown' aria-expanded='false')= item.menuShort || item.menuLong || item.title
+      ul.dropdown-menu
+        li
+          a.dropdown-item(href=item.path)= item.menuLong || item.menuShort || item.title
+        each child in item.children
+          li
+            a.dropdown-item(href=child.path)= child.menuLong || child.menuShort || child.title
+  else
+    li.nav-item
+      a.nav-link(href=item.path)= item.menuShort || item.menuLong || item.title
+
+======
+
+templates/default/views/partial/header/menu.pug
+------
+include menu-mix
+- const topMenu = mainMenu[lang][0].children
+
+ul.navbar-nav.me-auto.mb-2.mb-lg-0
+  each pg in topMenu
+    +navItem(pg, path)
+
+======
+
+templates/default/views/partial/header/repo.pug
+------
+if links.github
+  .d-flex.justify-content-around.gap-1.mx-1
+    a.icon-link(href=links.github.url title=links.github[lang] target="_blank" rel="noopener noreferrer")
+      img(src=assets('svg/github.svg') alt="GitHub" width="16" height="16")
+
+======
+
+templates/default/views/partial/head.pug
+------
+head
+  meta(charset="utf-8")
+  meta(http-equiv="X-UA-Compatible" content="ie=edge")
+  meta(name="viewport" content="initial-scale=1, maximum-scale=1, user-scalable=no, width=device-width")
+  title= title
+  link(rel="stylesheet" href='/css/bootstrap-5.3.8.min.css')
+  link(rel="stylesheet" href='/index.' + timekey + '.css')
+  script(src='/index.' + timekey + '.js')
+
+======
+
+templates/default/views/partial/modal.pug
+------
+// https://getbootstrap.com/docs/4.0/components/modal/
+// Modal
+#main-modal-center.modal.fade(tabindex='-1' aria-labelledby='exampleModalLabel' aria-hidden='true')
+  .modal-dialog
+    .modal-content
+      .modal-header
+        h5#exampleModalLabel.modal-title Modal title
+        button.btn-close(type='button' data-bs-dismiss='modal' aria-label='Close')
+      .modal-body
+        | ...
+      // .modal-footer
+        button.btn.btn-secondary(type='button' data-bs-dismiss='modal') Close
+        button.btn.btn-primary(type='button') Save changes
+
+======
+
+templates/default/views/partial/navbar.pug
+------
+nav.navbar.navbar-expand-md.navbar-dark.bg-primary
+  .container-lg
+    a.navbar-brand.st-brand(href=linksByLang[lang]['/'].path)
+      =meta.title[lang]
+    button.navbar-toggler(type='button' data-bs-toggle='collapse' data-bs-target='#navbarSupportedContent' aria-controls='navbarSupportedContent' aria-expanded='false' aria-label='Toggle navigation')
+      span.navbar-toggler-icon
+    #navbarSupportedContent.collapse.navbar-collapse
+      include header/menu
+      include header/repo
+      include header/langs
+
+======
+
+templates/default/views/plugins.dart
+------
+import 'package:pug_dart/pug_dart.dart' as pug;
+
+Map<String, pug.PugHelper> get helpers => {
+  'assets': (args) {
+    final path = args.first?.toString() ?? '';
+    return '/a/$path';
+  },
+  'dateFmt': (args) {
+    final raw = args.first?.toString() ?? '';
+    if (raw.isEmpty) return '';
+    final dt = DateTime.tryParse(raw);
+    if (dt == null) return raw;
+    return dt.toIso8601String().substring(0, 16).replaceAll('T', ' ');
+  },
+};
+
+======
+
