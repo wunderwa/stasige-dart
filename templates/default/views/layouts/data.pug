@@ -1,6 +1,15 @@
 .main !{body}
 
-ul.list-group
-  each item in data.example.tech[lang]
-    li.list-group-item
-      a(href=item.url target="_blank" rel="noopener noreferrer")= item.title
+table.table.table-striped.table-hover.mt-3
+  thead
+    tr
+      th #
+      th Title
+      th Link
+  tbody
+    each item, i in data.example.tech[lang]
+      tr
+        td= i + 1
+        td= item.title
+        td
+          a(href=item.url target="_blank" rel="noopener noreferrer")= item.url

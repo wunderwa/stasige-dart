@@ -10,6 +10,7 @@ Future<void> copyVendor(CoreConfig cfg) async {
   await for (final ent in src.list(recursive: true, followLinks: false)) {
     if (ent is! File) continue;
     final rel = p.relative(ent.path, from: cfg.cssVendorDir);
+    if (p.basename(rel).startsWith('.')) continue;
     final target = File(p.join(dst.path, rel));
     await target.parent.create(recursive: true);
     await ent.copy(target.path);
