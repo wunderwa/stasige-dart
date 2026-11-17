@@ -7,6 +7,7 @@ import 'copy_assets.dart';
 import 'build_html.dart';
 import 'copy_vendor.dart';
 import 'init.dart';
+import 'new_page.dart';
 
 Future<void> runSite({
   required List<String> args,
@@ -36,10 +37,11 @@ Future<void> runSite({
   final rest = args.length > 1 ? args.sublist(1) : <String>[];
 
   if (cmd == 'help' || cmd == '' || cmd == '-h' || cmd == '--help') {
-    print('Usage: stasige init | stasige build [--dev --css --js --html --img]');
+    print('Usage: stasige init | stasige new <path> | stasige build [--dev --css --js --html --img]');
     return;
   }
   if (cmd == 'init') { await runInit(); return; }
+  if (cmd == 'new') { await runNew(rest); return; }
   if (cmd == 'build') {
     final argv = parser.parse(rest);
     final cfg = getConfig(dev: argv['dev'] as bool);
