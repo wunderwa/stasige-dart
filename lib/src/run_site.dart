@@ -4,6 +4,7 @@ import 'package:pug_dart/pug_dart.dart' as pug;
 import 'config.dart';
 import 'build_css.dart';
 import 'build_html.dart';
+import 'copy_vendor.dart';
 import 'init.dart';
 
 Future<void> runSite({
@@ -44,7 +45,7 @@ Future<void> runSite({
     final css = argv['css'] as bool, js = argv['js'] as bool,
           html = argv['html'] as bool, img = argv['img'] as bool;
     final all = !css && !js && !html && !img;
-    if (all || css) await buildCss(cfg);
+    if (all || css) { await buildCss(cfg); await copyVendor(cfg); }
     if (all || js) stdout.writeln('js: not implemented yet');
     if (all || html) await taskHtml(cfg, effectiveHelpers);
     if (all || img) stdout.writeln('img: not implemented yet');
