@@ -31,23 +31,24 @@ Multi-level from `pathBase`. See navbar above.
 
 ### Usage
 
-**Install** in your project's `pubspec.yaml`:
+**Install once** (before publication on pub.dev — via git; later `dart pub global activate stasige`):
 
-```yaml
-dev_dependencies:
-  stasige: ^0.1.0
+```bash
+dart pub global activate --source git https://github.com/wunderwa/stasige-dart.git
 ```
 
-**Init** a site in an empty directory:
+**Create a site**:
 
-```
+```bash
+mkdir my-site && cd my-site
+stasige init
 dart pub get
-dart run stasige init
+./wrk -b -D
 ```
 
 **Build** via `./wrk`:
 
-```
+```bash
 ./wrk -b           # full build -> dist/
 ./wrk -b -D        # dev build -> dev/ (timekey=dev)
 ./wrk -b -S        # css only
@@ -56,17 +57,18 @@ dart run stasige init
 ./wrk -b -J        # js only (requires esbuild)
 ./wrk -C -b        # clear + build
 ./wrk srv          # serve dist/ on :8000
+stasige new about  # create pages/about/index.<lang>.md
 ```
 
 **Structure**:
 
-```
+```text
 build.json      langs / meta / links
 pages/          *.md (index.<lang>.md)
 data/           *.json (in pug as data.<name>)
 views/          *.pug (layouts, partials)
 styles/         *.scss -> index.<timekey>.css
-scripts/        *.ts   -> index.<timekey>.js (esbuild)
+scripts/        *.ts   -> index.<timekey>.js (esbuild, optional)
 assets/         svg/webp/img -> /a/
 css/            vendor (bootstrap) -> /css/
 ```
