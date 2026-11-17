@@ -1,0 +1,16 @@
+// Stasige default styles (Bootstrap дополняется здесь)
+.content {
+  padding-top: 1rem;
+  padding-bottom: 1rem;
+}
+
+.st-brand {
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+.st-footer-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
