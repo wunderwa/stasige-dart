@@ -2,6 +2,7 @@ nav.navbar.navbar-expand-md.navbar-dark.bg-primary
   .container-lg
     - var homeUrl = (linksByLang[lang] && linksByLang[lang]['/'] ? linksByLang[lang]['/'].path : '/')
     a.navbar-brand.st-brand(href=homeUrl)
+      img(src=assets('svg/stasige.svg') alt="Stasige" width="36" height="36" class="me-1 svg-white")
       =meta.title[lang]
     button.navbar-toggler(type='button' data-bs-toggle='collapse' data-bs-target='#navbarSupportedContent' aria-controls='navbarSupportedContent' aria-expanded='false' aria-label='Toggle navigation')
       span.navbar-toggler-icon

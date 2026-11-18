@@ -31,10 +31,10 @@ Multi-level from `pathBase`. See navbar above.
 
 ### Usage
 
-**Install once** (before publication on pub.dev — via git; later `dart pub global activate stasige`):
+**Install once**:
 
 ```bash
-dart pub global activate --source git https://github.com/wunderwa/stasige-dart.git
+dart pub global activate stasige
 ```
 
 **Create a site**:
@@ -72,3 +72,4 @@ scripts/        *.ts   -> index.<timekey>.js (esbuild, optional)
 assets/         svg/webp/img -> /a/
 css/            vendor (bootstrap) -> /css/
 ```
+

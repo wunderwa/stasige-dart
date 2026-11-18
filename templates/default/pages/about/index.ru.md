@@ -31,10 +31,10 @@ title: О сайте
 
 ### Использование
 
-**Установка** (до публикации на pub.dev — через git; позже `dart pub global activate stasige`):
+**Установка**
 
 ```bash
-dart pub global activate --source git https://github.com/wunderwa/stasige-dart.git
+dart pub global activate stasige
 ```
 
 **Создание сайта**:
