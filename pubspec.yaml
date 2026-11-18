@@ -1,9 +1,9 @@
 name: stasige
 description: Static site generator on Dart — Markdown, Pug, SCSS, multi-language.
-version: 0.1.0
-repository: https://github.com/wunderwa/stasige
-homepage: https://github.com/wunderwa/stasige
-issue_tracker: https://github.com/wunderwa/stasige/issues
+version: 0.1.1
+repository: https://github.com/wunderwa/stasige-dart
+homepage: https://github.com/wunderwa/stasige-dart
+issue_tracker: https://github.com/wunderwa/stasige-dart/issues
 topics:
   - static-site-generator
   - markdown

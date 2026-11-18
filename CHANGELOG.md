@@ -1,3 +1,7 @@
+## 0.1.1
+- variable fixes
+- fix CSS class parser in Markdown
+
 ## 0.1.0
 
 - Initial release.

@@ -157,6 +157,15 @@ if about
 - In `pug`: `data.<filename>` for data from `data/*.json`.
 - Navigation: `mainMenu[lang]`, `pageLangs`, `linksByDir` / `linksByLang`.
 
+
+## Publication
+
+```shell
+git tag -a v0.0.0 -m "v0.0.0"
+pub publish --dry-run
+
+```
+
 ## License
 
 MIT
