@@ -1,0 +1,19 @@
+# Dart
+.dart_tool/
+.packages
+pubspec.lock
+build/
+
+# build output
+/dist/
+/dev/
+
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# OS
+.DS_Store
+*.log

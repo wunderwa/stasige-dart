@@ -7,6 +7,9 @@ build/
 # build output
 /dist/
 /dev/
+# development artifacts
+.context
+run.sh
 
 # demo copies of template in repo root (templates/default is source of truth)
 /views/

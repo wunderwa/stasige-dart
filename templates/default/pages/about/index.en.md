@@ -9,10 +9,10 @@ title: About
 
 ### Markdown attrs
 
-Text centered with `{.text-center}`
+Text centered with {`.text-center`}
 {.text-center}
 
-A colored block with `{.alert .alert-info}`
+A colored block with {`.alert.alert-info`}
 {.alert .alert-info}
 
 ### Build variables
@@ -27,7 +27,7 @@ Multi-level from `pathBase`. See navbar above.
 
 ### Links
 
-[GitHub](${links.github.url}){.btn .btn-secondary}
+[GitHub](${links.github.url}){.btn.btn-secondary}
 
 ### Usage
 
@@ -56,7 +56,7 @@ dart pub get
 ./wrk -b -I        # assets only (svg copy, png/jpg -> webp)
 ./wrk -b -J        # js only (requires esbuild)
 ./wrk -C -b        # clear + build
-./wrk srv          # serve dist/ on :8000
+./wrk -s          # serve dist/ on :8000
 stasige new about  # create pages/about/index.<lang>.md
 ```
 

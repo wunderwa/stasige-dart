@@ -45,7 +45,12 @@ List<PageConfig> getPageConfigList(CoreConfig cfg) {
     final rel = p.relative(f.path, from: cfg.pagesDir);
     final pathBase = p.dirname('/$rel');
     final isMain = lang == mainLang;
-    final path = '${isMain ? '' : '/$lang'}$pathBase';
+    final String path;
+    if (pathBase == '/') {
+      path = isMain ? '/' : '/$lang';
+    } else {
+      path = isMain ? pathBase : '/$lang$pathBase';
+    }
     final parsed = parseMd(f.path, {
       'langs': cfg.build.langs,
       'meta': cfg.build.meta,

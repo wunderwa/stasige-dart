@@ -9,9 +9,15 @@
   },
   "links": {
     "github": {
-      "url": "https://github.com/",
+      "url": "https://github.com/wunderwa/sstasige-dart",
       "en": "GitHub",
       "ru": "GitHub"
+    },
+    "pubdev": {
+      "url": "https://pub.dev/packages/stasige",
+      "en": "pub.dev",
+      "ru": "pub.dev"
     }
+
   }
 }

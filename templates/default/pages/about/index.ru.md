@@ -9,10 +9,10 @@ title: О сайте
 
 ### Атрибуты Markdown
 
-Текст по центру через `{.text-center}`
+Текст по центру через {`.text-center`}
 {.text-center}
 
-Цветной блок через `{.alert .alert-info}`
+Цветной блок через {`.alert.alert-info`}
 {.alert .alert-info}
 
 ### Переменные сборки
@@ -27,7 +27,7 @@ title: О сайте
 
 ### Ссылки
 
-[GitHub](${links.github.url}){.btn .btn-secondary}
+[GitHub](${links.github.url}) {.btn.btn-secondary}
 
 ### Использование
 
@@ -56,7 +56,7 @@ dart pub get
 ./wrk -b -I        # только assets (svg копия, png/jpg -> webp)
 ./wrk -b -J        # только js (нужен esbuild)
 ./wrk -C -b        # очистка + сборка
-./wrk srv          # сервер dist/ на :8000
+./wrk -s          # сервер dist/ на :8000
 stasige new about  # создать pages/about/index.<lang>.md
 ```
 

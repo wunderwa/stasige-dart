@@ -37,7 +37,7 @@ Inside a site (after `stasige init`):
 ./wrk -b -I                # assets only (svg copy, png/jpg -> webp)
 ./wrk -b -J                # js only (requires esbuild)
 ./wrk -C -b                # clear + build
-./wrk srv                  # serve dist/ on :8000
+./wrk s                  # serve dist/ on :8000
 stasige new about          # create pages/about/index.<lang>.md
 ```
 
@@ -65,7 +65,7 @@ css/            vendor (bootstrap) -> /css/
 -H    html only
 -I    assets only
 -h    help
-srv   serve target dir on :8000
+-s    serve target dir on :8000
 ```
 
 ## License

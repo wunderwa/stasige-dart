@@ -8,6 +8,27 @@ import 'menus.dart';
 import 'langs.dart';
 
 
+
+Map<String, dynamic> _menuItemToMap(MenuItem i) => {
+  'lang': i.lang,
+  'path': i.path,
+  'pathBase': i.pathBase,
+  'menuShort': i.menuShort,
+  'menuLong': i.menuLong,
+  'title': i.title,
+};
+
+Map<String, Map<String, dynamic>> _linksToMaps(Map<String, Map<String, MenuItem>> m) =>
+    m.map((k, v) => MapEntry(k, v.map((k2, v2) => MapEntry(k2, _menuItemToMap(v2)))));
+
+List<Map<String, dynamic>> _pageLangsToMaps(List<PageLang> list) =>
+    list.map((p) => {
+      'url': p.url,
+      'title': p.title,
+      'lang': p.lang,
+      'disabled': p.disabled,
+    }).toList();
+
 Map<String, dynamic> _readData(String dir) {
   final d = Directory(dir);
   if (!d.existsSync()) return {};
@@ -56,8 +77,8 @@ Future<void> genPage({
     'pathBase': page.pathBase,
     'langs': cfg.build.langs,
     'mainMenu': _menusToMap(menus.mainMenu),
-    'linksByLang': menus.linksByLang,
-    'linksByDir': menus.linksByDir,
+    'linksByLang': _linksToMaps(menus.linksByLang),
+    'linksByDir': _linksToMaps(menus.linksByDir),
     'timekey': cfg.timekey,
     'meta': cfg.build.meta,
     'links': cfg.build.links,
@@ -69,11 +90,11 @@ Future<void> genPage({
   final viewLocals = <String, Object?>{
     ...layoutLocals,
     'content': layoutContent,
-    'pageLangs': getPageLangs(
+    'pageLangs': _pageLangsToMaps(getPageLangs(
       cfg.build.langs,
       page.lang,
       menus.linksByDir[page.pathBase] ?? {},
-    ),
+    )),
   };
 
   final html = await pug.renderFile(viewFile, viewLocals, options);
